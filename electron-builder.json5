@@ -11,6 +11,9 @@
     "dist",
     "dist-electron"
   ],
+  "asarUnpack": [
+    "**/node_modules/better-sqlite3/**"
+  ],
   "extraResources": [
     {
       "from": "build/metainfo/com.miniclip.app.appdata.xml",
