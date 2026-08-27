@@ -44,6 +44,14 @@ const APP_ID = 'com.miniclip.app'
 const APP_NAME = 'Miniclip'
 const APP_CLASS = 'miniclip'
 
+// Some Linux GPU drivers hit broken VA-API paths under Electron's GPU
+// process (seen as vaInitialize failures and, in the worst case, GPU-process
+// crashes). This app's UI is simple enough that software compositing is
+// indistinguishable in practice, so trade the acceleration for stability.
+if (process.platform === 'linux') {
+  app.disableHardwareAcceleration()
+}
+
 app.setName(APP_CLASS)
 app.setAppUserModelId(APP_ID)
 
