@@ -7,7 +7,7 @@
 if (process.env.APPIMAGE || process.env.SNAP_NAME) {
   process.env.ELECTRON_DISABLE_SANDBOX = '1'
 }
-import { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, shell, protocol } from 'electron'
+import { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, shell, protocol, session } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -486,6 +486,19 @@ app.whenReady().then(() => {
 
   const IMAGES_DIR = path.join(app.getPath('userData'), 'images')
   if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true })
+
+  // Only applied to packaged builds: the Vite dev server needs eval-based
+  // HMR and a websocket connection that a strict CSP would otherwise block.
+  if (!VITE_DEV_SERVER_URL) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': ["default-src 'self'; img-src 'self' data: miniclip-img:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self';"],
+        },
+      })
+    })
+  }
 
   protocol.registerFileProtocol('miniclip-img', (request, callback) => {
     const filepath = resolveImageFilePath(request.url)
