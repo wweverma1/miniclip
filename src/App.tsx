@@ -22,6 +22,15 @@ function TrashIcon() {
   );
 }
 
+// line-clamp-4 only hides overflow visually — without this, an unbounded
+// paste still gets pushed into the DOM in full on every render.
+const PREVIEW_CHAR_LIMIT = 500;
+
+function truncateForPreview(text: string): string {
+  if (text.length <= PREVIEW_CHAR_LIMIT) return text;
+  return text.slice(0, PREVIEW_CHAR_LIMIT) + "…";
+}
+
 function App() {
   const [items, setItems] = useState<ClipboardItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -225,7 +234,7 @@ function App() {
                   <img
                     src={item.content}
                     alt="Clipboard image"
-                    className="max-w-full h-auto rounded"
+                    className="w-full max-h-40 object-cover rounded"
                   />
                 ) : (
                   <div className="flex items-center gap-2">
@@ -242,7 +251,7 @@ function App() {
                       <PinIcon />
                     </button>
                     <div className="min-w-0 flex-1 text-sm font-medium line-clamp-4 break-all text-gnome-text whitespace-pre-wrap">
-                      {item.content}
+                      {truncateForPreview(item.content)}
                     </div>
                   </div>
                 )}
