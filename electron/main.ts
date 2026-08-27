@@ -113,6 +113,18 @@ function getDb(): Database.Database {
     // Ignore if column already exists
   }
 
+  try {
+    db.exec('ALTER TABLE clipboard_history ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0')
+  } catch (e) {
+    // Ignore if column already exists
+  }
+
+  try {
+    db.exec('ALTER TABLE clipboard_history ADD COLUMN pinned_at DATETIME')
+  } catch (e) {
+    // Ignore if column already exists
+  }
+
   return db
 }
 
@@ -150,7 +162,9 @@ function resolveImageFilePath(imgUrl: string): string | null {
 function trimHistory(maxSize: number) {
   try {
     const db = getDb()
-    const rowsToDelete = db.prepare(`SELECT id, content, content_type FROM clipboard_history WHERE id NOT IN (SELECT id FROM clipboard_history ORDER BY id DESC LIMIT ?)`).all(maxSize) as any[]
+    // Pinned items are exempt from the size cap entirely — only unpinned
+    // rows count towards maxSize and are eligible for trimming.
+    const rowsToDelete = db.prepare(`SELECT id, content, content_type FROM clipboard_history WHERE pinned = 0 AND id NOT IN (SELECT id FROM clipboard_history WHERE pinned = 0 ORDER BY id DESC LIMIT ?)`).all(maxSize) as any[]
     for (const row of rowsToDelete) {
       if (row.content_type === 'image' && row.content.startsWith('miniclip-img://')) {
         try {
@@ -542,8 +556,12 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-history', () => {
     const settings = getSettings()
-    const stmt = getDb().prepare('SELECT * FROM clipboard_history ORDER BY id DESC LIMIT ?')
-    const rows = stmt.all(settings.maxHistorySize) as ClipboardItem[]
+    const db = getDb()
+    // Pinned items always sort above regular ones, most-recently-pinned
+    // first, and aren't subject to the maxHistorySize cap.
+    const pinned = db.prepare('SELECT * FROM clipboard_history WHERE pinned = 1 ORDER BY pinned_at DESC, id DESC').all() as ClipboardItem[]
+    const unpinned = db.prepare('SELECT * FROM clipboard_history WHERE pinned = 0 ORDER BY id DESC LIMIT ?').all(settings.maxHistorySize) as ClipboardItem[]
+    const rows = [...pinned, ...unpinned]
     return rows.map(row => ({
       ...row,
       image_data: undefined, // no longer sending raw buffer to renderer
