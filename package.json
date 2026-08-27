@@ -2,7 +2,10 @@
   "name": "miniclip",
   "version": "1.0.0",
   "description": "A simple clipboard manager for Linux",
-  "author": "undefinederror <github@object.ninja>",
+  "author": "Aditya Verma <wweverma1@gmail.com> (https://github.com/wweverma1)",
+  "contributors": [
+    "undefinederror <github@object.ninja> (https://github.com/undefinederror)"
+  ],
   "license": "GPL-3.0-only",
   "private": true,
   "type": "module",
