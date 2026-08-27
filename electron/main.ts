@@ -630,6 +630,13 @@ app.whenReady().then(() => {
       } else {
         // Handle text copying
         clipboard.writeText(row.content)
+        if ((row as any).pinned) {
+          // Pinned entries are copied in place, not deleted + re-inserted
+          // (the renderer skips deleteHistoryItem for them). Sync lastText
+          // so the clipboard monitor doesn't see "new" content and insert
+          // a duplicate, unpinned row for the same text.
+          lastText = row.content
+        }
         log.info('Successfully copied text from database')
       }
     } catch (e) {
