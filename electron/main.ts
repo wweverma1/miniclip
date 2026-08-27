@@ -159,6 +159,21 @@ function resolveImageFilePath(imgUrl: string): string | null {
   }
 }
 
+function getImageContentSize(row: { content: string, image_data?: Buffer }): number {
+  if (row.content.startsWith('miniclip-img://')) {
+    const filepath = resolveImageFilePath(row.content)
+    if (filepath) {
+      try {
+        return fs.statSync(filepath).size
+      } catch (e) {
+        return 0
+      }
+    }
+  }
+  // Fallback for legacy rows that still carry the raw blob in the DB.
+  return row.image_data ? Buffer.byteLength(row.image_data) : 0
+}
+
 function trimHistory(maxSize: number) {
   try {
     const db = getDb()
@@ -566,7 +581,7 @@ app.whenReady().then(() => {
       ...row,
       image_data: undefined, // no longer sending raw buffer to renderer
       content_size: row.content_type === 'image'
-        ? 0 // or we could stat the file, but 0 is fine for display
+        ? getImageContentSize(row)
         : Buffer.byteLength(row.content, 'utf-8'),
     }))
   })
