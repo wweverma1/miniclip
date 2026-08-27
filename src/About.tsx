@@ -22,7 +22,18 @@ export default function About() {
               undefinederror (l.paci)
             </span>
             <div className="relative w-12 h-4">
-              
+
+              <img className="block absolute bottom-1/2 translate-y-1/2 left-0 h-5 w-auto" src="github.svg" height="32" width="32" />
+            </div>
+          </div>
+          <div
+            onClick={() => window.electronAPI.openExternal('https://github.com/wweverma1')}
+            className="flex items-center gap-2 group cursor-pointer mt-1"
+          >
+            <span className="text-[13px] text-gnome-text-dim group-hover:text-gnome-accent">
+              Aditya Verma
+            </span>
+            <div className="relative w-12 h-4">
               <img className="block absolute bottom-1/2 translate-y-1/2 left-0 h-5 w-auto" src="github.svg" height="32" width="32" />
             </div>
           </div>
