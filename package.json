@@ -12,7 +12,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "postinstall": "electron-builder install-app-deps",
     "prebuild": "node scripts/update-metainfo.mjs",
     "build": "tsc && vite build && electron-builder --linux",
     "build:publish": "npm run build -- --publish always",
@@ -24,7 +24,6 @@
     "electron-log": "^5.4.4"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.2.0",
     "@eslint/js": "^10.0.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/better-sqlite3": "^9.6.0",
