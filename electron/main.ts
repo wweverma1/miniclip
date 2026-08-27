@@ -44,6 +44,16 @@ const APP_ID = 'com.miniclip.app'
 const APP_NAME = 'Miniclip'
 const APP_CLASS = 'miniclip'
 
+// skipTaskbar (used below on every window) is a documented no-op under
+// Electron's native Wayland ozone platform — there's no Wayland protocol
+// equivalent to X11's _NET_WM_STATE_SKIP_TASKBAR, so GNOME's dock still
+// shows the window regardless. Forcing XWayland restores the X11 hint
+// mechanism, which Mutter/GNOME does honor. Must be set before app is
+// ready; harmless on X11 sessions, where it's already the natural choice.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('ozone-platform', 'x11')
+}
+
 app.setName(APP_CLASS)
 app.setAppUserModelId(APP_ID)
 
