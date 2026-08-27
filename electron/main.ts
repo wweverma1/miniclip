@@ -127,6 +127,26 @@ function getSettings(): Settings {
   return defaultSettings
 }
 
+// Image files are always written by us as `${Date.now()}-${randomHex}.png`
+// (see the clipboard monitor below). Resolving the on-disk path straight
+// from the DB's miniclip-img:// hostname without this check would let a
+// tampered/corrupted row escape the images directory via `..` or `/`.
+const IMAGE_FILENAME_PATTERN = /^[A-Za-z0-9_-]+\.png$/
+
+function resolveImageFilePath(imgUrl: string): string | null {
+  try {
+    const filename = new URL(imgUrl).hostname
+    if (!IMAGE_FILENAME_PATTERN.test(filename)) {
+      log.warn('Rejected suspicious image filename:', filename)
+      return null
+    }
+    return path.join(app.getPath('userData'), 'images', filename)
+  } catch (e) {
+    log.warn('Failed to parse image URL:', imgUrl, e)
+    return null
+  }
+}
+
 function trimHistory(maxSize: number) {
   try {
     const db = getDb()
@@ -134,9 +154,8 @@ function trimHistory(maxSize: number) {
     for (const row of rowsToDelete) {
       if (row.content_type === 'image' && row.content.startsWith('miniclip-img://')) {
         try {
-          const filename = new URL(row.content).hostname
-          const filepath = path.join(app.getPath('userData'), 'images', filename)
-          if (fs.existsSync(filepath)) fs.unlinkSync(filepath)
+          const filepath = resolveImageFilePath(row.content)
+          if (filepath && fs.existsSync(filepath)) fs.unlinkSync(filepath)
         } catch (e) { log.error('Failed to delete trimmed image file', e) }
       }
       db.prepare('DELETE FROM clipboard_history WHERE id = ?').run(row.id)
@@ -469,14 +488,12 @@ app.whenReady().then(() => {
   if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true })
 
   protocol.registerFileProtocol('miniclip-img', (request, callback) => {
-    try {
-      const url = new URL(request.url)
-      const filename = url.hostname
-      callback({ path: path.join(IMAGES_DIR, filename) })
-    } catch (e) {
-      log.error('Protocol handling error:', e)
-      callback({ error: -2 }) // net::ERR_FAILED
+    const filepath = resolveImageFilePath(request.url)
+    if (!filepath) {
+      callback({ error: -6 }) // net::ERR_FILE_NOT_FOUND
+      return
     }
+    callback({ path: filepath })
   })
 
   // Log native sub-process crashes (renderer, GPU, utility)
@@ -546,9 +563,8 @@ app.whenReady().then(() => {
 
         if (row.content.startsWith('miniclip-img://')) {
           try {
-            const filename = new URL(row.content).hostname
-            const filepath = path.join(app.getPath('userData'), 'images', filename)
-            const imageFromFile = nativeImage.createFromPath(filepath)
+            const filepath = resolveImageFilePath(row.content)
+            const imageFromFile = filepath ? nativeImage.createFromPath(filepath) : nativeImage.createEmpty()
             if (!imageFromFile.isEmpty()) {
               clipboard.writeImage(imageFromFile)
               log.info('Successfully copied image from file')
@@ -595,9 +611,8 @@ app.whenReady().then(() => {
       const stmt = getDb().prepare('SELECT content, content_type FROM clipboard_history WHERE id = ?')
       const row = stmt.get(id) as any
       if (row && row.content_type === 'image' && row.content.startsWith('miniclip-img://')) {
-        const filename = new URL(row.content).hostname
-        const filepath = path.join(app.getPath('userData'), 'images', filename)
-        if (fs.existsSync(filepath)) fs.unlinkSync(filepath)
+        const filepath = resolveImageFilePath(row.content)
+        if (filepath && fs.existsSync(filepath)) fs.unlinkSync(filepath)
       }
     } catch(e) {
       log.error('Failed to delete image file', e)
