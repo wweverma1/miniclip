@@ -15,7 +15,7 @@ Miniclip monitors your clipboard and stores a history of entries.
 ```
 sudo snap install miniclip
 ```
-Alternitavely grap the `.deb` or `.AppImage` from [releases](https://github.com/undefinederror/miniclip/releases/)
+Alternitavely grap the `.deb` or `.AppImage` from [releases](https://github.com/wweverma1/miniclip/releases/)
 
 ## Features
 - **Modern UI**: Clean, GNOME-inspired design with system theme support.
