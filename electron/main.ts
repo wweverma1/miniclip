@@ -109,19 +109,19 @@ function getDb(): Database.Database {
 
   try {
     db.exec('ALTER TABLE clipboard_history ADD COLUMN hash TEXT')
-  } catch (e) {
+  } catch {
     // Ignore if column already exists
   }
 
   try {
     db.exec('ALTER TABLE clipboard_history ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0')
-  } catch (e) {
+  } catch {
     // Ignore if column already exists
   }
 
   try {
     db.exec('ALTER TABLE clipboard_history ADD COLUMN pinned_at DATETIME')
-  } catch (e) {
+  } catch {
     // Ignore if column already exists
   }
 
@@ -165,7 +165,7 @@ function getImageContentSize(row: { content: string, image_data?: Buffer }): num
     if (filepath) {
       try {
         return fs.statSync(filepath).size
-      } catch (e) {
+      } catch {
         return 0
       }
     }
@@ -729,7 +729,7 @@ app.whenReady().then(() => {
         log.warn('Blocked open-external for non-http(s) URL:', url)
         return
       }
-    } catch (e) {
+    } catch {
       log.warn('Blocked open-external for unparseable URL:', url)
       return
     }
