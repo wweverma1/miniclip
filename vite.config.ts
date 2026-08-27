@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import path from 'node:path'
 import electron from 'vite-plugin-electron/simple'
 import react from '@vitejs/plugin-react'
-import pkg from './package.json'
+import pkg from './package.json' with { type: 'json' }
 
 process.env.VITE_APP_VERSION = pkg.version
 
@@ -16,7 +16,12 @@ export default defineConfig({
         entry: 'electron/main.ts',
         vite: {
           build: {
-            rollupOptions: {
+            // Vite 8 uses Rolldown by default — the option key moved from
+            // rollupOptions to rolldownOptions. Without this, better-sqlite3
+            // (a native addon) gets bundled straight into main.js instead of
+            // staying a real require(), and its internal binding-path
+            // resolution (which uses __dirname) breaks under ESM output.
+            rolldownOptions: {
               external: ['better-sqlite3'],
             },
           },
@@ -25,7 +30,7 @@ export default defineConfig({
       preload: {
         // Shortcut of `build.rollupOptions.input`.
         // Preload scripts may contain Web assets, so use the `build.rollupOptions.input` instead `build.lib.entry`.
-        input: path.join(__dirname, 'electron/preload.ts'),
+        input: path.join(import.meta.dirname, 'electron/preload.ts'),
       },
       // Ployfill the Electron and Node.js API for Renderer process.
       // If you want use Node.js in Renderer process, the `nodeIntegration` needs to be enabled in the Main process.

@@ -12,15 +12,19 @@ Miniclip monitors your clipboard and stores a history of entries.
 
 ## Installation
 
+Grab the `.deb`, `.AppImage`, or `.snap` from [releases](https://github.com/wweverma1/miniclip/releases/).
+
+The `.snap` isn't published to the Snap Store — install it locally with:
 ```
-sudo snap install miniclip
+sudo snap install --dangerous miniclip-<version>-x86_64.snap
 ```
-Alternitavely grap the `.deb` or `.AppImage` from [releases](https://github.com/undefinederror/miniclip/releases/)
 
 ## Features
 - **Modern UI**: Clean, GNOME-inspired design with system theme support.
-- **In-Memory History**: Stores text-only clipboard entries during your current session.
+- **Persistent history**: Clipboard entries are stored on disk and survive app restarts and reboots.
 - **Image support**: Stores both text and screenshots.
+- **Pin entries**: Pin text entries to keep them at the top of the list, exempt from the history size limit, and preserved when clearing history.
+- **Clear all**: Wipe unpinned history in one click without touching pinned entries.
 
 
 ## Usage

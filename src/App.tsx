@@ -2,6 +2,39 @@ import { useEffect, useState, useRef } from "react";
 
 // Interface definitions moved to vite-env.d.ts
 
+function PinIcon() {
+  return (
+    <svg viewBox="0 0 90 90" width="11" height="11" fill="currentColor">
+      <path d="M 84.303 82.191 l -6.492 -6.492 l -6.492 -6.492 c -1.077 -1.087 -2.175 -2.153 -3.235 -3.257 c -0.016 -0.009 -0.031 -0.017 -0.047 -0.025 l -2.154 -2.154 L 90 39.653 l -1.056 -1.056 c -9.367 -9.368 -23.457 -12.705 -36.139 -8.632 l -7.345 -7.344 c 0.929 -7.947 -1.815 -15.958 -7.422 -21.565 L 36.983 0 L 0 36.982 l 1.057 1.056 c 5.606 5.606 13.614 8.353 21.565 7.422 l 7.345 7.345 c -4.073 12.681 -0.737 26.772 8.631 36.139 L 39.653 90 l 24.117 -24.117 l 2.155 2.155 c 0.008 0.015 0.016 0.031 0.025 0.046 c 1.1 1.058 2.164 2.152 3.247 3.226 l 8.081 8.081 l 0 0 l 4.912 4.912 l 3.246 3.246 c 1.403 0.761 2.796 1.532 4.302 2.19 c -0.658 -1.506 -1.429 -2.899 -2.19 -4.302 L 84.303 82.191 z M 33.086 52.897 l 0.311 -0.886 l -9.714 -9.714 l -0.742 0.108 c -6.763 0.987 -13.633 -1.042 -18.681 -5.459 L 36.948 4.26 c 4.415 5.047 6.447 11.92 5.458 18.68 l -0.108 0.742 l 9.714 9.714 l 0.886 -0.311 c 11.361 -3.984 24.084 -1.387 32.853 6.593 L 39.678 85.75 C 31.698 76.981 29.102 64.254 33.086 52.897 z" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  // The path's actual bounding box is x:[3,21] y:[2,22] — narrower and
+  // taller than its 24x24 viewBox. Cropping the viewBox to that bounds
+  // (with a 1px margin) instead of the full 24x24 keeps the rendered
+  // glyph centered, so the button's padding reads as even on every side.
+  return (
+    <svg viewBox="2 1 20 22" width="14" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  );
+}
+
+// line-clamp-4 only hides overflow visually — without this, an unbounded
+// paste still gets pushed into the DOM in full on every render.
+const PREVIEW_CHAR_LIMIT = 500;
+
+function truncateForPreview(text: string): string {
+  if (text.length <= PREVIEW_CHAR_LIMIT) return text;
+  return text.slice(0, PREVIEW_CHAR_LIMIT) + "…";
+}
+
 function App() {
   const [items, setItems] = useState<ClipboardItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -57,11 +90,14 @@ function App() {
       // The main process will handle both text and image copying logic
       await window.electronAPI.copyToClipboard(item.id);
 
-      // Delete the item from history after copying
-      // The clipboard monitor will detect the re-written content,
-      // re-insert it at the top, and fire onClipboardChange which
-      // triggers refreshItems() automatically.
-      await window.electronAPI.deleteHistoryItem(item.id);
+      if (!item.pinned) {
+        // Delete the item from history after copying
+        // The clipboard monitor will detect the re-written content,
+        // re-insert it at the top, and fire onClipboardChange which
+        // triggers refreshItems() automatically.
+        await window.electronAPI.deleteHistoryItem(item.id);
+      }
+      // Pinned items stay put — deleting would lose their pinned state.
 
       const settings = await window.electronAPI.getSettings();
       if (settings.autoCloseOnSelect) {
@@ -69,6 +105,34 @@ function App() {
       }
     } catch (err) {
       console.error("Failed to select item:", err);
+    }
+  };
+
+  const handleTogglePin = async (item: ClipboardItem) => {
+    try {
+      await window.electronAPI.togglePin(item.id);
+      await refreshItems();
+      // item.pinned is the pre-toggle value — falsy here means this action
+      // just pinned it, so it now sits at the very top of the list.
+      // Unpinning drops it back into normal order, not necessarily near
+      // the top, so that direction doesn't jump the scrollbar.
+      if (!item.pinned && listRef.current) {
+        listRef.current.scrollTop = 0;
+      }
+    } catch (err) {
+      console.error("Failed to toggle pin:", err);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!window.confirm("Clear all clipboard history? Pinned items will be kept.")) {
+      return;
+    }
+    try {
+      await window.electronAPI.clearHistory();
+      await refreshItems();
+    } catch (err) {
+      console.error("Failed to clear history:", err);
     }
   };
 
@@ -108,7 +172,6 @@ function App() {
         const item = filteredItems[selectedIndex];
         if (item) {
           handleSelectItem(item);
-          handleDeleteItem(item.id);
         }
       } else if (e.key === "Delete") {
         e.preventDefault();
@@ -144,10 +207,10 @@ function App() {
   return (
     <div className="h-screen w-full bg-gnome-bg text-gnome-text flex flex-col overflow-hidden font-sans">
       <div className="p-3 flex flex-col flex-1 overflow-hidden">
-        <div className="mb-4 p-1">
+        <div className="mb-4 p-1 flex items-center gap-2">
           <input
             type="text"
-            className="w-full bg-gnome-input border border-gnome-border rounded-lg p-2.5 text-gnome-text focus:outline-none focus:ring-2 focus:ring-gnome-accent/50 transition-all shadow-sm"
+            className="flex-1 min-w-0 bg-gnome-input border border-gnome-border rounded-lg p-2.5 text-gnome-text focus:outline-none focus:ring-2 focus:ring-gnome-accent/50 transition-all shadow-sm"
             placeholder="Search clipboard history..."
             value={search}
             onChange={(e) => {
@@ -156,6 +219,14 @@ function App() {
             }}
             autoFocus
           />
+          <button
+            type="button"
+            onClick={handleClearAll}
+            title="Clear all (keeps pinned items)"
+            className="shrink-0 self-stretch aspect-square p-2 flex items-center justify-center rounded-lg border border-gnome-border text-gnome-text-dim hover:text-gnome-text hover:bg-gnome-surface transition-colors"
+          >
+            <TrashIcon />
+          </button>
         </div>
 
         <ul ref={listRef} className="flex-1 overflow-y-auto space-y-1.5">
@@ -174,11 +245,25 @@ function App() {
                   <img
                     src={item.content}
                     alt="Clipboard image"
-                    className="max-w-full h-auto rounded"
+                    className="w-full max-h-40 object-cover rounded"
                   />
                 ) : (
-                  <div className="text-sm font-medium line-clamp-4 break-all text-gnome-text whitespace-pre-wrap">
-                    {item.content}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTogglePin(item);
+                      }}
+                      title={item.pinned ? "Unpin" : "Pin to top"}
+                      className={`shrink-0 p-1 rounded-full flex items-center justify-center transition-colors ${item.pinned ? "text-orange-500" : "text-gnome-text-dim/40 hover:text-orange-500"
+                        }`}
+                    >
+                      <PinIcon />
+                    </button>
+                    <div className="min-w-0 flex-1 text-sm font-medium line-clamp-4 break-all text-gnome-text whitespace-pre-wrap">
+                      {truncateForPreview(item.content)}
+                    </div>
                   </div>
                 )}
                 <span className={`absolute ${item.content_type === 'image' ? 'bottom-1' : '-bottom-1'} -right-1 bg-black/60 text-white text-[10px] px-1 py-0.5 rounded flex align-center leading-none`}>

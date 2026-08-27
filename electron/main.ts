@@ -1,5 +1,13 @@
-process.env.ELECTRON_DISABLE_SANDBOX = '1'
-import { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, shell, protocol } from 'electron'
+// The setuid chrome-sandbox helper only ends up correctly configured
+// (root-owned, mode 4755) when a package manager's post-install step runs,
+// which electron-builder's deb target provides automatically. AppImage has
+// no install step to do that, and Snap already sandboxes the app via strict
+// confinement, so the Chromium sandbox is only disabled for those two
+// formats — deb installs keep real OS-level renderer sandboxing.
+if (process.env.APPIMAGE || process.env.SNAP_NAME) {
+  process.env.ELECTRON_DISABLE_SANDBOX = '1'
+}
+import { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, shell, protocol, session } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -101,7 +109,19 @@ function getDb(): Database.Database {
 
   try {
     db.exec('ALTER TABLE clipboard_history ADD COLUMN hash TEXT')
-  } catch (e) {
+  } catch {
+    // Ignore if column already exists
+  }
+
+  try {
+    db.exec('ALTER TABLE clipboard_history ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0')
+  } catch {
+    // Ignore if column already exists
+  }
+
+  try {
+    db.exec('ALTER TABLE clipboard_history ADD COLUMN pinned_at DATETIME')
+  } catch {
     // Ignore if column already exists
   }
 
@@ -119,16 +139,52 @@ function getSettings(): Settings {
   return defaultSettings
 }
 
+// Image files are always written by us as `${Date.now()}-${randomHex}.png`
+// (see the clipboard monitor below). Resolving the on-disk path straight
+// from the DB's miniclip-img:// hostname without this check would let a
+// tampered/corrupted row escape the images directory via `..` or `/`.
+const IMAGE_FILENAME_PATTERN = /^[A-Za-z0-9_-]+\.png$/
+
+function resolveImageFilePath(imgUrl: string): string | null {
+  try {
+    const filename = new URL(imgUrl).hostname
+    if (!IMAGE_FILENAME_PATTERN.test(filename)) {
+      log.warn('Rejected suspicious image filename:', filename)
+      return null
+    }
+    return path.join(app.getPath('userData'), 'images', filename)
+  } catch (e) {
+    log.warn('Failed to parse image URL:', imgUrl, e)
+    return null
+  }
+}
+
+function getImageContentSize(row: { content: string, image_data?: Buffer }): number {
+  if (row.content.startsWith('miniclip-img://')) {
+    const filepath = resolveImageFilePath(row.content)
+    if (filepath) {
+      try {
+        return fs.statSync(filepath).size
+      } catch {
+        return 0
+      }
+    }
+  }
+  // Fallback for legacy rows that still carry the raw blob in the DB.
+  return row.image_data ? Buffer.byteLength(row.image_data) : 0
+}
+
 function trimHistory(maxSize: number) {
   try {
     const db = getDb()
-    const rowsToDelete = db.prepare(`SELECT id, content, content_type FROM clipboard_history WHERE id NOT IN (SELECT id FROM clipboard_history ORDER BY id DESC LIMIT ?)`).all(maxSize) as any[]
+    // Pinned items are exempt from the size cap entirely — only unpinned
+    // rows count towards maxSize and are eligible for trimming.
+    const rowsToDelete = db.prepare(`SELECT id, content, content_type FROM clipboard_history WHERE pinned = 0 AND id NOT IN (SELECT id FROM clipboard_history WHERE pinned = 0 ORDER BY id DESC LIMIT ?)`).all(maxSize) as any[]
     for (const row of rowsToDelete) {
       if (row.content_type === 'image' && row.content.startsWith('miniclip-img://')) {
         try {
-          const filename = new URL(row.content).hostname
-          const filepath = path.join(app.getPath('userData'), 'images', filename)
-          if (fs.existsSync(filepath)) fs.unlinkSync(filepath)
+          const filepath = resolveImageFilePath(row.content)
+          if (filepath && fs.existsSync(filepath)) fs.unlinkSync(filepath)
         } catch (e) { log.error('Failed to delete trimmed image file', e) }
       }
       db.prepare('DELETE FROM clipboard_history WHERE id = ?').run(row.id)
@@ -460,15 +516,26 @@ app.whenReady().then(() => {
   const IMAGES_DIR = path.join(app.getPath('userData'), 'images')
   if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true })
 
+  // Only applied to packaged builds: the Vite dev server needs eval-based
+  // HMR and a websocket connection that a strict CSP would otherwise block.
+  if (!VITE_DEV_SERVER_URL) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': ["default-src 'self'; img-src 'self' data: miniclip-img:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self';"],
+        },
+      })
+    })
+  }
+
   protocol.registerFileProtocol('miniclip-img', (request, callback) => {
-    try {
-      const url = new URL(request.url)
-      const filename = url.hostname
-      callback({ path: path.join(IMAGES_DIR, filename) })
-    } catch (e) {
-      log.error('Protocol handling error:', e)
-      callback({ error: -2 }) // net::ERR_FAILED
+    const filepath = resolveImageFilePath(request.url)
+    if (!filepath) {
+      callback({ error: -6 }) // net::ERR_FILE_NOT_FOUND
+      return
     }
+    callback({ path: filepath })
   })
 
   // Log native sub-process crashes (renderer, GPU, utility)
@@ -504,13 +571,17 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-history', () => {
     const settings = getSettings()
-    const stmt = getDb().prepare('SELECT * FROM clipboard_history ORDER BY id DESC LIMIT ?')
-    const rows = stmt.all(settings.maxHistorySize) as ClipboardItem[]
+    const db = getDb()
+    // Pinned items always sort above regular ones, most-recently-pinned
+    // first, and aren't subject to the maxHistorySize cap.
+    const pinned = db.prepare('SELECT * FROM clipboard_history WHERE pinned = 1 ORDER BY pinned_at DESC, id DESC').all() as ClipboardItem[]
+    const unpinned = db.prepare('SELECT * FROM clipboard_history WHERE pinned = 0 ORDER BY id DESC LIMIT ?').all(settings.maxHistorySize) as ClipboardItem[]
+    const rows = [...pinned, ...unpinned]
     return rows.map(row => ({
       ...row,
       image_data: undefined, // no longer sending raw buffer to renderer
       content_size: row.content_type === 'image'
-        ? 0 // or we could stat the file, but 0 is fine for display
+        ? getImageContentSize(row)
         : Buffer.byteLength(row.content, 'utf-8'),
     }))
   })
@@ -538,9 +609,8 @@ app.whenReady().then(() => {
 
         if (row.content.startsWith('miniclip-img://')) {
           try {
-            const filename = new URL(row.content).hostname
-            const filepath = path.join(app.getPath('userData'), 'images', filename)
-            const imageFromFile = nativeImage.createFromPath(filepath)
+            const filepath = resolveImageFilePath(row.content)
+            const imageFromFile = filepath ? nativeImage.createFromPath(filepath) : nativeImage.createEmpty()
             if (!imageFromFile.isEmpty()) {
               clipboard.writeImage(imageFromFile)
               log.info('Successfully copied image from file')
@@ -575,10 +645,52 @@ app.whenReady().then(() => {
       } else {
         // Handle text copying
         clipboard.writeText(row.content)
+        if ((row as any).pinned) {
+          // Pinned entries are copied in place, not deleted + re-inserted
+          // (the renderer skips deleteHistoryItem for them). Sync lastText
+          // so the clipboard monitor doesn't see "new" content and insert
+          // a duplicate, unpinned row for the same text.
+          lastText = row.content
+        }
         log.info('Successfully copied text from database')
       }
     } catch (e) {
       log.error('Database error when retrieving item:', e)
+    }
+  })
+
+  ipcMain.handle('toggle-pin', (_event, id: number) => {
+    try {
+      const db = getDb()
+      const row = db.prepare('SELECT content_type, pinned FROM clipboard_history WHERE id = ?').get(id) as any
+      if (!row) return
+      if (row.content_type !== 'text') {
+        log.warn('Ignoring pin toggle for non-text item', id)
+        return
+      }
+      const nowPinned = row.pinned ? 0 : 1
+      db.prepare('UPDATE clipboard_history SET pinned = ?, pinned_at = ? WHERE id = ?')
+        .run(nowPinned, nowPinned ? new Date().toISOString() : null, id)
+    } catch (e) {
+      log.error('Failed to toggle pin:', e)
+    }
+  })
+
+  ipcMain.handle('clear-history', () => {
+    try {
+      const db = getDb()
+      // Pinned items are kept — "clear all" only wipes the regular,
+      // unpinned history, matching the Windows clipboard's behavior.
+      const rows = db.prepare(`SELECT content, content_type FROM clipboard_history WHERE pinned = 0`).all() as any[]
+      for (const row of rows) {
+        if (row.content_type === 'image' && row.content.startsWith('miniclip-img://')) {
+          const filepath = resolveImageFilePath(row.content)
+          if (filepath && fs.existsSync(filepath)) fs.unlinkSync(filepath)
+        }
+      }
+      db.prepare('DELETE FROM clipboard_history WHERE pinned = 0').run()
+    } catch (e) {
+      log.error('Failed to clear history:', e)
     }
   })
 
@@ -587,9 +699,8 @@ app.whenReady().then(() => {
       const stmt = getDb().prepare('SELECT content, content_type FROM clipboard_history WHERE id = ?')
       const row = stmt.get(id) as any
       if (row && row.content_type === 'image' && row.content.startsWith('miniclip-img://')) {
-        const filename = new URL(row.content).hostname
-        const filepath = path.join(app.getPath('userData'), 'images', filename)
-        if (fs.existsSync(filepath)) fs.unlinkSync(filepath)
+        const filepath = resolveImageFilePath(row.content)
+        if (filepath && fs.existsSync(filepath)) fs.unlinkSync(filepath)
       }
     } catch(e) {
       log.error('Failed to delete image file', e)
@@ -612,6 +723,16 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('open-external', (_event, url: string) => {
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        log.warn('Blocked open-external for non-http(s) URL:', url)
+        return
+      }
+    } catch {
+      log.warn('Blocked open-external for unparseable URL:', url)
+      return
+    }
     shell.openExternal(url)
   })
 

@@ -26,11 +26,11 @@
 
   <launchable type="desktop-id">com.miniclip.app.desktop</launchable>
 
-  <url type="homepage">https://github.com/undefinederror/miniclip</url>
-  <url type="bugtracker">https://github.com/undefinederror/miniclip/issues</url>
+  <url type="homepage">https://github.com/wweverma1/miniclip</url>
+  <url type="bugtracker">https://github.com/wweverma1/miniclip/issues</url>
 
-  <developer id="com.github.undefinederror">
-    <name>undefinederror</name>
+  <developer id="com.github.wweverma1">
+    <name>Aditya Verma</name>
   </developer>
 
   <provides>
@@ -52,7 +52,7 @@
   <screenshots>
     <screenshot type="default">
       <caption>Miniclip clipboard history panel</caption>
-      <image>https://raw.githubusercontent.com/undefinederror/miniclip/main/screenshot.jpg</image>
+      <image>https://raw.githubusercontent.com/wweverma1/miniclip/main/screenshot.jpg</image>
     </screenshot>
   </screenshots>
 
