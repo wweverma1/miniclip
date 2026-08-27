@@ -245,7 +245,7 @@ function App() {
                         handleTogglePin(item);
                       }}
                       title={item.pinned ? "Unpin" : "Pin to top"}
-                      className={`shrink-0 p-1 rounded-full flex items-center justify-center transition-colors ${item.pinned ? "text-gnome-accent" : "text-gnome-text-dim/40 hover:text-gnome-accent"
+                      className={`shrink-0 p-1 rounded-full flex items-center justify-center transition-colors ${item.pinned ? "text-orange-500" : "text-gnome-text-dim/40 hover:text-orange-500"
                         }`}
                     >
                       <PinIcon />
