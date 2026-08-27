@@ -30,6 +30,7 @@
       "deb",
       "snap"
     ],
+    "syncDesktopName": true,
     "category": "Utility",
     "icon": "public/icon.png",
     "synopsis": "A simple clipboard manager for Linux with history tracking",
