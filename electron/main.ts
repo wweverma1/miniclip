@@ -382,6 +382,7 @@ function createPreferencesWindow() {
     resizable: false,
     frame: true,
     backgroundColor: '#242424', // GNOME Dark BG
+    skipTaskbar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
@@ -414,6 +415,7 @@ function createAboutWindow() {
     resizable: false,
     frame: true,
     backgroundColor: '#242424', // GNOME Dark BG
+    skipTaskbar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
@@ -448,6 +450,7 @@ function createMainWindow(show: boolean = false) {
     height: 550,
     backgroundColor: '#242424', // GNOME Dark BG
     show: false, // Start hidden to prevent white flash
+    skipTaskbar: true, // Tray-only app — never show in the dock/taskbar
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'), // Auto-compiled to mjs
     },
