@@ -620,6 +620,16 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('open-external', (_event, url: string) => {
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        log.warn('Blocked open-external for non-http(s) URL:', url)
+        return
+      }
+    } catch (e) {
+      log.warn('Blocked open-external for unparseable URL:', url)
+      return
+    }
     shell.openExternal(url)
   })
 
