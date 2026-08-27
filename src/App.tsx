@@ -2,6 +2,27 @@ import { useEffect, useState, useRef } from "react";
 
 // Interface definitions moved to vite-env.d.ts
 
+function PinIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 21s-7-7.58-7-12a7 7 0 0 1 14 0c0 4.42-7 12-7 12z" />
+      <circle cx="12" cy="9" r="2.5" fill={filled ? "var(--bg)" : "none"} />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  );
+}
+
 function App() {
   const [items, setItems] = useState<ClipboardItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -57,11 +78,14 @@ function App() {
       // The main process will handle both text and image copying logic
       await window.electronAPI.copyToClipboard(item.id);
 
-      // Delete the item from history after copying
-      // The clipboard monitor will detect the re-written content,
-      // re-insert it at the top, and fire onClipboardChange which
-      // triggers refreshItems() automatically.
-      await window.electronAPI.deleteHistoryItem(item.id);
+      if (!item.pinned) {
+        // Delete the item from history after copying
+        // The clipboard monitor will detect the re-written content,
+        // re-insert it at the top, and fire onClipboardChange which
+        // triggers refreshItems() automatically.
+        await window.electronAPI.deleteHistoryItem(item.id);
+      }
+      // Pinned items stay put — deleting would lose their pinned state.
 
       const settings = await window.electronAPI.getSettings();
       if (settings.autoCloseOnSelect) {
@@ -69,6 +93,27 @@ function App() {
       }
     } catch (err) {
       console.error("Failed to select item:", err);
+    }
+  };
+
+  const handleTogglePin = async (item: ClipboardItem) => {
+    try {
+      await window.electronAPI.togglePin(item.id);
+      await refreshItems();
+    } catch (err) {
+      console.error("Failed to toggle pin:", err);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!window.confirm("Clear all clipboard history? Pinned items will be kept.")) {
+      return;
+    }
+    try {
+      await window.electronAPI.clearHistory();
+      await refreshItems();
+    } catch (err) {
+      console.error("Failed to clear history:", err);
     }
   };
 
@@ -108,7 +153,6 @@ function App() {
         const item = filteredItems[selectedIndex];
         if (item) {
           handleSelectItem(item);
-          handleDeleteItem(item.id);
         }
       } else if (e.key === "Delete") {
         e.preventDefault();
@@ -144,10 +188,10 @@ function App() {
   return (
     <div className="h-screen w-full bg-gnome-bg text-gnome-text flex flex-col overflow-hidden font-sans">
       <div className="p-3 flex flex-col flex-1 overflow-hidden">
-        <div className="mb-4 p-1">
+        <div className="mb-4 p-1 flex items-center gap-2">
           <input
             type="text"
-            className="w-full bg-gnome-input border border-gnome-border rounded-lg p-2.5 text-gnome-text focus:outline-none focus:ring-2 focus:ring-gnome-accent/50 transition-all shadow-sm"
+            className="flex-1 min-w-0 bg-gnome-input border border-gnome-border rounded-lg p-2.5 text-gnome-text focus:outline-none focus:ring-2 focus:ring-gnome-accent/50 transition-all shadow-sm"
             placeholder="Search clipboard history..."
             value={search}
             onChange={(e) => {
@@ -156,6 +200,14 @@ function App() {
             }}
             autoFocus
           />
+          <button
+            type="button"
+            onClick={handleClearAll}
+            title="Clear all (keeps pinned items)"
+            className="shrink-0 self-stretch aspect-square p-2 flex items-center justify-center rounded-lg border border-gnome-border text-gnome-text-dim hover:text-gnome-text hover:bg-gnome-surface transition-colors"
+          >
+            <TrashIcon />
+          </button>
         </div>
 
         <ul ref={listRef} className="flex-1 overflow-y-auto space-y-1.5">
@@ -177,9 +229,23 @@ function App() {
                     className="max-w-full h-auto rounded"
                   />
                 ) : (
-                  <div className="text-sm font-medium line-clamp-4 break-all text-gnome-text whitespace-pre-wrap">
-                    {item.content}
-                  </div>
+                  <>
+                    <div className="text-sm font-medium line-clamp-4 break-all text-gnome-text whitespace-pre-wrap pr-5">
+                      {item.content}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTogglePin(item);
+                      }}
+                      title={item.pinned ? "Unpin" : "Pin to top"}
+                      className={`absolute top-0 right-0 p-0.5 rounded transition-colors ${item.pinned ? "text-gnome-accent" : "text-gnome-text-dim/50 hover:text-gnome-text-dim"
+                        }`}
+                    >
+                      <PinIcon filled={!!item.pinned} />
+                    </button>
+                  </>
                 )}
                 <span className={`absolute ${item.content_type === 'image' ? 'bottom-1' : '-bottom-1'} -right-1 bg-black/60 text-white text-[10px] px-1 py-0.5 rounded flex align-center leading-none`}>
                   {formatSize(item.content_size)}
