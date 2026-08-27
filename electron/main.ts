@@ -637,6 +637,41 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.handle('toggle-pin', (_event, id: number) => {
+    try {
+      const db = getDb()
+      const row = db.prepare('SELECT content_type, pinned FROM clipboard_history WHERE id = ?').get(id) as any
+      if (!row) return
+      if (row.content_type !== 'text') {
+        log.warn('Ignoring pin toggle for non-text item', id)
+        return
+      }
+      const nowPinned = row.pinned ? 0 : 1
+      db.prepare('UPDATE clipboard_history SET pinned = ?, pinned_at = ? WHERE id = ?')
+        .run(nowPinned, nowPinned ? new Date().toISOString() : null, id)
+    } catch (e) {
+      log.error('Failed to toggle pin:', e)
+    }
+  })
+
+  ipcMain.handle('clear-history', () => {
+    try {
+      const db = getDb()
+      // Pinned items are kept — "clear all" only wipes the regular,
+      // unpinned history, matching the Windows clipboard's behavior.
+      const rows = db.prepare(`SELECT content, content_type FROM clipboard_history WHERE pinned = 0`).all() as any[]
+      for (const row of rows) {
+        if (row.content_type === 'image' && row.content.startsWith('miniclip-img://')) {
+          const filepath = resolveImageFilePath(row.content)
+          if (filepath && fs.existsSync(filepath)) fs.unlinkSync(filepath)
+        }
+      }
+      db.prepare('DELETE FROM clipboard_history WHERE pinned = 0').run()
+    } catch (e) {
+      log.error('Failed to clear history:', e)
+    }
+  })
+
   ipcMain.handle('delete-history-item', (_event, id: number) => {
     try {
       const stmt = getDb().prepare('SELECT content, content_type FROM clipboard_history WHERE id = ?')
