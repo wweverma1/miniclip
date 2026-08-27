@@ -112,6 +112,13 @@ function App() {
     try {
       await window.electronAPI.togglePin(item.id);
       await refreshItems();
+      // item.pinned is the pre-toggle value — falsy here means this action
+      // just pinned it, so it now sits at the very top of the list.
+      // Unpinning drops it back into normal order, not necessarily near
+      // the top, so that direction doesn't jump the scrollbar.
+      if (!item.pinned && listRef.current) {
+        listRef.current.scrollTop = 0;
+      }
     } catch (err) {
       console.error("Failed to toggle pin:", err);
     }
