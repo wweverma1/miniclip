@@ -2,11 +2,10 @@ import { useEffect, useState, useRef } from "react";
 
 // Interface definitions moved to vite-env.d.ts
 
-function PinIcon({ filled }: { filled: boolean }) {
+function PinIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="13" height="13" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 21s-7-7.58-7-12a7 7 0 0 1 14 0c0 4.42-7 12-7 12z" />
-      <circle cx="12" cy="9" r="2.5" fill={filled ? "var(--bg)" : "none"} />
+    <svg viewBox="0 0 90 90" width="11" height="11" fill="currentColor">
+      <path d="M 84.303 82.191 l -6.492 -6.492 l -6.492 -6.492 c -1.077 -1.087 -2.175 -2.153 -3.235 -3.257 c -0.016 -0.009 -0.031 -0.017 -0.047 -0.025 l -2.154 -2.154 L 90 39.653 l -1.056 -1.056 c -9.367 -9.368 -23.457 -12.705 -36.139 -8.632 l -7.345 -7.344 c 0.929 -7.947 -1.815 -15.958 -7.422 -21.565 L 36.983 0 L 0 36.982 l 1.057 1.056 c 5.606 5.606 13.614 8.353 21.565 7.422 l 7.345 7.345 c -4.073 12.681 -0.737 26.772 8.631 36.139 L 39.653 90 l 24.117 -24.117 l 2.155 2.155 c 0.008 0.015 0.016 0.031 0.025 0.046 c 1.1 1.058 2.164 2.152 3.247 3.226 l 8.081 8.081 l 0 0 l 4.912 4.912 l 3.246 3.246 c 1.403 0.761 2.796 1.532 4.302 2.19 c -0.658 -1.506 -1.429 -2.899 -2.19 -4.302 L 84.303 82.191 z M 33.086 52.897 l 0.311 -0.886 l -9.714 -9.714 l -0.742 0.108 c -6.763 0.987 -13.633 -1.042 -18.681 -5.459 L 36.948 4.26 c 4.415 5.047 6.447 11.92 5.458 18.68 l -0.108 0.742 l 9.714 9.714 l 0.886 -0.311 c 11.361 -3.984 24.084 -1.387 32.853 6.593 L 39.678 85.75 C 31.698 76.981 29.102 64.254 33.086 52.897 z" />
     </svg>
   );
 }
@@ -229,10 +228,7 @@ function App() {
                     className="max-w-full h-auto rounded"
                   />
                 ) : (
-                  <>
-                    <div className="text-sm font-medium line-clamp-4 break-all text-gnome-text whitespace-pre-wrap pr-5">
-                      {item.content}
-                    </div>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -240,12 +236,15 @@ function App() {
                         handleTogglePin(item);
                       }}
                       title={item.pinned ? "Unpin" : "Pin to top"}
-                      className={`absolute top-0 right-0 p-0.5 rounded transition-colors ${item.pinned ? "text-gnome-accent" : "text-gnome-text-dim/50 hover:text-gnome-text-dim"
+                      className={`shrink-0 p-1 rounded-full flex items-center justify-center transition-colors ${item.pinned ? "text-gnome-accent" : "text-gnome-text-dim/40 hover:text-gnome-accent"
                         }`}
                     >
-                      <PinIcon filled={!!item.pinned} />
+                      <PinIcon />
                     </button>
-                  </>
+                    <div className="min-w-0 flex-1 text-sm font-medium line-clamp-4 break-all text-gnome-text whitespace-pre-wrap">
+                      {item.content}
+                    </div>
+                  </div>
                 )}
                 <span className={`absolute ${item.content_type === 'image' ? 'bottom-1' : '-bottom-1'} -right-1 bg-black/60 text-white text-[10px] px-1 py-0.5 rounded flex align-center leading-none`}>
                   {formatSize(item.content_size)}
