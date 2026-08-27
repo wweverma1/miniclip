@@ -1,4 +1,12 @@
-process.env.ELECTRON_DISABLE_SANDBOX = '1'
+// The setuid chrome-sandbox helper only ends up correctly configured
+// (root-owned, mode 4755) when a package manager's post-install step runs,
+// which electron-builder's deb target provides automatically. AppImage has
+// no install step to do that, and Snap already sandboxes the app via strict
+// confinement, so the Chromium sandbox is only disabled for those two
+// formats — deb installs keep real OS-level renderer sandboxing.
+if (process.env.APPIMAGE || process.env.SNAP_NAME) {
+  process.env.ELECTRON_DISABLE_SANDBOX = '1'
+}
 import { app, BrowserWindow, ipcMain, clipboard, Tray, Menu, nativeImage, shell, protocol } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
