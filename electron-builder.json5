@@ -73,15 +73,6 @@
     ],
     "environment": {
       "TMPDIR": "$XDG_RUNTIME_DIR"
-    },
-    "publish": [
-      {
-        "provider": "snapStore",
-        "channels": "stable"
-      },
-      {
-        "provider": "github"
-      }
-    ]
+    }
   }
 }
