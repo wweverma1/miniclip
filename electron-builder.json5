@@ -73,6 +73,15 @@
     ],
     "environment": {
       "TMPDIR": "$XDG_RUNTIME_DIR"
-    }
+    },
+    // electron-builder's SnapTarget always defaults to Snap Store publish
+    // unless snap.publish is explicitly set to something else -- omitting
+    // it entirely (as before) falls through to that hardcoded snapStore
+    // fallback rather than inheriting the top-level `publish` config.
+    "publish": [
+      {
+        "provider": "github"
+      }
+    ]
   }
 }
