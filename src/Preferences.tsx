@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { defaultSettings } from './shared/settings';
+import { defaultSettings, type Settings } from './shared/settings';
 
 export default function Preferences() {
     const [settings, setSettings] = useState({ ...defaultSettings });
@@ -8,7 +8,7 @@ export default function Preferences() {
         window.electronAPI.getSettings().then(setSettings);
     }, []);
 
-    const handleChange = (key: string, value: any) => {
+    const handleChange = <K extends keyof Settings>(key: K, value: Settings[K]) => {
         const newSettings = { ...settings, [key]: value };
         setSettings(newSettings);
         window.electronAPI.setSettings(newSettings);
