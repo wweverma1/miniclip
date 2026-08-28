@@ -519,7 +519,13 @@ app.on('before-quit', () => {
   isQuitting = true
 })
 
-app.whenReady().then(() => {
+// Guarded on gotTheLock: app.quit() above is only a request, not synchronous —
+// without this guard, a second instance that loses the lock race can still
+// run this entire block (spawning its own window, tray, and DB connection)
+// before the quit actually takes effect, which is how duplicate windows
+// showed up when 'miniclip show' was run in quick succession.
+if (gotTheLock) {
+  app.whenReady().then(() => {
   log.info(`=== Miniclip starting up === v${app.getVersion()}`)
   log.info(`Log file: ${log.transports.file.getFile().path}`)
   const mem = process.memoryUsage()
@@ -846,7 +852,8 @@ app.whenReady().then(() => {
       }
     }
   }, 500) // Reduced from 1000ms to 500ms for faster detection
-})
+  })
+}
 
 app.on('will-quit', () => {
   db?.close()
