@@ -1,10 +1,11 @@
-import { ipcRenderer, contextBridge } from 'electron'
+import { ipcRenderer, contextBridge, IpcRendererEvent } from 'electron'
+import type { Settings } from '../src/shared/settings'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('electronAPI', {
   isSnap: !!process.env.SNAP_NAME,
   onClipboardChange: (callback: (text: string) => void) => {
-    const subscription = (_event: any, text: string) => callback(text)
+    const subscription = (_event: IpcRendererEvent, text: string) => callback(text)
     ipcRenderer.on('clipboard-change', subscription)
     return () => {
       ipcRenderer.removeListener('clipboard-change', subscription)
@@ -29,7 +30,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
   closeWindow: () => ipcRenderer.invoke('close-window'),
   getSettings: () => ipcRenderer.invoke('get-settings'),
-  setSettings: (settings: any) => ipcRenderer.invoke('set-settings', settings),
+  setSettings: (settings: Settings) => ipcRenderer.invoke('set-settings', settings),
   getVersion: () => ipcRenderer.invoke('get-version'),
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
 })

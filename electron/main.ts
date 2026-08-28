@@ -44,6 +44,14 @@ const APP_ID = 'com.miniclip.app'
 const APP_NAME = 'Miniclip'
 const APP_CLASS = 'miniclip'
 
+// Some Linux GPU drivers hit broken VA-API paths under Electron's GPU
+// process (seen as vaInitialize failures and, in the worst case, GPU-process
+// crashes). This app's UI is simple enough that software compositing is
+// indistinguishable in practice, so trade the acceleration for stability.
+if (process.platform === 'linux') {
+  app.disableHardwareAcceleration()
+}
+
 app.setName(APP_CLASS)
 app.setAppUserModelId(APP_ID)
 
@@ -51,6 +59,7 @@ let win: BrowserWindow | null
 let prefsWin: BrowserWindow | null = null
 let aboutWin: BrowserWindow | null = null
 let tray: Tray | null = null
+let isQuitting = false
 let db: Database.Database | null = null
 
 protocol.registerSchemesAsPrivileged([
@@ -179,7 +188,7 @@ function trimHistory(maxSize: number) {
     const db = getDb()
     // Pinned items are exempt from the size cap entirely — only unpinned
     // rows count towards maxSize and are eligible for trimming.
-    const rowsToDelete = db.prepare(`SELECT id, content, content_type FROM clipboard_history WHERE pinned = 0 AND id NOT IN (SELECT id FROM clipboard_history WHERE pinned = 0 ORDER BY id DESC LIMIT ?)`).all(maxSize) as any[]
+    const rowsToDelete = db.prepare<[number], Pick<ClipboardItem, 'id' | 'content' | 'content_type'>>(`SELECT id, content, content_type FROM clipboard_history WHERE pinned = 0 AND id NOT IN (SELECT id FROM clipboard_history WHERE pinned = 0 ORDER BY id DESC LIMIT ?)`).all(maxSize)
     for (const row of rowsToDelete) {
       if (row.content_type === 'image' && row.content.startsWith('miniclip-img://')) {
         try {
@@ -465,7 +474,7 @@ function createMainWindow(show: boolean = false) {
   // Prevent closing, just hide
   win.setMenu(null) // Hide the default menu bar
   win.on('close', (event) => {
-    if (!(app as any).isQuitting) {
+    if (!isQuitting) {
       event.preventDefault()
       win?.webContents.send('window-hidden')
       win?.hide()
@@ -507,10 +516,16 @@ app.on('activate', () => {
 })
 
 app.on('before-quit', () => {
-  (app as any).isQuitting = true
+  isQuitting = true
 })
 
-app.whenReady().then(() => {
+// Guarded on gotTheLock: app.quit() above is only a request, not synchronous —
+// without this guard, a second instance that loses the lock race can still
+// run this entire block (spawning its own window, tray, and DB connection)
+// before the quit actually takes effect, which is how duplicate windows
+// showed up when 'miniclip show' was run in quick succession.
+if (gotTheLock) {
+  app.whenReady().then(() => {
   log.info(`=== Miniclip starting up === v${app.getVersion()}`)
   log.info(`Log file: ${log.transports.file.getFile().path}`)
   const mem = process.memoryUsage()
@@ -648,7 +663,7 @@ app.whenReady().then(() => {
       } else {
         // Handle text copying
         clipboard.writeText(row.content)
-        if ((row as any).pinned) {
+        if (row.pinned) {
           // Pinned entries are copied in place, not deleted + re-inserted
           // (the renderer skips deleteHistoryItem for them). Sync lastText
           // so the clipboard monitor doesn't see "new" content and insert
@@ -665,7 +680,7 @@ app.whenReady().then(() => {
   ipcMain.handle('toggle-pin', (_event, id: number) => {
     try {
       const db = getDb()
-      const row = db.prepare('SELECT content_type, pinned FROM clipboard_history WHERE id = ?').get(id) as any
+      const row = db.prepare<[number], Pick<ClipboardItem, 'content_type' | 'pinned'>>('SELECT content_type, pinned FROM clipboard_history WHERE id = ?').get(id)
       if (!row) return
       if (row.content_type !== 'text') {
         log.warn('Ignoring pin toggle for non-text item', id)
@@ -684,7 +699,7 @@ app.whenReady().then(() => {
       const db = getDb()
       // Pinned items are kept — "clear all" only wipes the regular,
       // unpinned history, matching the Windows clipboard's behavior.
-      const rows = db.prepare(`SELECT content, content_type FROM clipboard_history WHERE pinned = 0`).all() as any[]
+      const rows = db.prepare<[], Pick<ClipboardItem, 'content' | 'content_type'>>(`SELECT content, content_type FROM clipboard_history WHERE pinned = 0`).all()
       for (const row of rows) {
         if (row.content_type === 'image' && row.content.startsWith('miniclip-img://')) {
           const filepath = resolveImageFilePath(row.content)
@@ -699,8 +714,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle('delete-history-item', (_event, id: number) => {
     try {
-      const stmt = getDb().prepare('SELECT content, content_type FROM clipboard_history WHERE id = ?')
-      const row = stmt.get(id) as any
+      const stmt = getDb().prepare<[number], Pick<ClipboardItem, 'content' | 'content_type'>>('SELECT content, content_type FROM clipboard_history WHERE id = ?')
+      const row = stmt.get(id)
       if (row && row.content_type === 'image' && row.content.startsWith('miniclip-img://')) {
         const filepath = resolveImageFilePath(row.content)
         if (filepath && fs.existsSync(filepath)) fs.unlinkSync(filepath)
@@ -744,7 +759,7 @@ app.whenReady().then(() => {
   let lastImageHash = ''
 
   try {
-    const lastItem = getDb().prepare('SELECT content, content_type, hash FROM clipboard_history ORDER BY id DESC LIMIT 1').get() as any
+    const lastItem = getDb().prepare<[], Pick<ClipboardItem, 'content' | 'content_type'> & { hash: string | null }>('SELECT content, content_type, hash FROM clipboard_history ORDER BY id DESC LIMIT 1').get()
     if (lastItem) {
       if (lastItem.content_type === 'text') {
         lastText = lastItem.content
@@ -837,7 +852,8 @@ app.whenReady().then(() => {
       }
     }
   }, 500) // Reduced from 1000ms to 500ms for faster detection
-})
+  })
+}
 
 app.on('will-quit', () => {
   db?.close()

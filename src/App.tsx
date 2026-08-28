@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 
 // Interface definitions moved to vite-env.d.ts
 
@@ -56,7 +56,7 @@ function App() {
 
     // Listen for clipboard changes
     // returns a cleanup function
-    const unsubscribeClipboard = window.electronAPI.onClipboardChange((_) => {
+    const unsubscribeClipboard = window.electronAPI.onClipboardChange(() => {
       refreshItems();
     });
 
@@ -136,7 +136,7 @@ function App() {
     }
   };
 
-  const handleDeleteItem = async (id: number) => {
+  const handleDeleteItem = useCallback(async (id: number) => {
     try {
       await window.electronAPI.deleteHistoryItem(id);
       await refreshItems();
@@ -150,7 +150,7 @@ function App() {
     } catch (err) {
       console.error("Failed to delete item:", err);
     }
-  };
+  }, [filteredItems]);
 
   // Handle Keyboard Navigation
   useEffect(() => {
@@ -186,7 +186,7 @@ function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [filteredItems, selectedIndex]);
+  }, [filteredItems, selectedIndex, handleDeleteItem]);
 
   // Scroll current item into view
   useEffect(() => {
